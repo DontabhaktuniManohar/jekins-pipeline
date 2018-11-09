@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+    http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>com.fedex.sefs.common</groupId>
+	<artifactId>sefs-jenkins-shared-library</artifactId>
+	<version>3.0.0-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>jenkins_shared_library for SEFS - Collection of pipeline tools</name>
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-site-plugin</artifactId>
+				<version>3.3</version>
+				<dependencies>
+					<dependency>
+						<groupId>lt.velykis.maven.skins</groupId>
+						<artifactId>reflow-velocity-tools</artifactId>
+						<version>1.1.1</version>
+					</dependency>
+					<!-- Reflow skin requires Velocity >= 1.7 ] -->
+					<dependency>
+						<groupId>org.apache.velocity</groupId>
+						<artifactId>velocity</artifactId>
+						<version>1.7</version>
+					</dependency>
+				</dependencies>
+			</plugin>
+		</plugins>
+		<extensions>
+			<extension>
+				<groupId>org.apache.maven.wagon</groupId>
+				<artifactId>wagon-ssh-external</artifactId>
+				<version>2.8</version>
+			</extension>
+		</extensions>
+	</build>
+
+	<distributionManagement>
+		<snapshotRepository>
+			<id>snapshots</id>
+			<url>http://sefsmvn.ute.fedex.com:9999/nexus/content/repositories/snapshots</url>
+		</snapshotRepository>
+		<repository>
+			<id>releases</id>
+			<url>http://sefsmvn.ute.fedex.com:9999/nexus/content/repositories/releases</url>
+		</repository>
+		<site>
+			<id>mvnown</id>
+			<url>scpexe://maven.ground.fedex.com/var/fedex/scm/mvn/httproot/site/${project.artifactId}/${project.artifactId}-${project.version}</url>
+		</site>
+	</distributionManagement>
+</project>

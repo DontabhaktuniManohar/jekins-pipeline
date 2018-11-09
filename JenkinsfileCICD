@@ -1,0 +1,109 @@
+#!/usr/bin/groovy
+
+@Library('reference-pipeline')
+@Library('AppServiceAccount')
+@Library('libz') _
+import groovy.time.*
+
+def duration = ''
+def error = null
+def _timeout_ = 60
+def fortify = false
+try {  initialize {} } catch (_errors) { echo "initialization error: ${_errors}" }
+try {  _timeout_ = "${PERFORM_RELEASE_CUT}" == 'true' ? 120 : 60 } catch (error_x) {}
+try {  def test="${DEPLOY_NODE}" } catch (error1) { DEPLOY_NODE = '' }
+try {  def test_y = "${NODE_NAME}" } catch (exception) { NODE_NAME = "ShipmentEFS-Java8" }
+try {  def test_jt= "${JOB_TYPE}" } catch (exception) { JOB_TYPE="CICD" }
+try {  def test_lt= "${APP_TYPE}" } catch (exception) { APP_TYPE="java" }
+try {  fortify = "${FORTIFY}" == 'true' ? true : false } catch (error_x) {}
+
+def appType = "${APP_TYPE}"
+def nodeAssignment = "${NODE_NAME}"
+if (appType.toUpperCase().contains("JAVA") && !nodeAssignment.toUpperCase().contains('UWB')) { nodeAssignment = '' }
+echo "Running on NODE_NAME = ${nodeAssignment} / ${NODE_NAME} / ${JOB_TYPE } / ${APP_TYPE}: timeout = ${_timeout_}"
+node(nodeAssignment) {
+  try {
+    timeout(_timeout_) {
+      timestamps {
+        step([$class: 'WsCleanup'])
+        buildPrepare()
+        buildCheckout()
+        if ("${JOB_TYPE}" == "CICD" || "${JOB_TYPE}" == "CI" ) {
+          buildPlugin(
+            nodeName : "${nodeAssignment}",
+            goal : "clean install",
+            fortify : fortify
+          )
+          // TODO: remove
+          echo "--->${currentBuild.result}"
+          testCycle {
+            nodeName = nodeAssignment
+          }
+          // TODO: remove
+          echo "--->${currentBuild.result}"
+          def parallel_map  = [:]
+          parallel_map << [ publishReports : {
+            publishTestResults(appType)
+          }]
+          parallel_map << [ archivingArtifacts : {
+            try {
+              stash name: 'archives', includes: '**/target/*.zip,**/target/*.*ar'
+            } catch (errora) {}
+          }]
+
+          parallel parallel_map
+
+          if ( currentBuild.result == 'SUCCESS' || currentBuild.result == null) {
+                buildPlugin(
+                  nodeName : "${nodeAssignment}",
+                  stageName : 'Upload To Nexus',
+                  goal : 'deploy -Dexec.skip=true -Dmaven.javadoc.skip=true -Dskip.npm=true -Dmaven.resources.skip=true -Dskip.yarn=true -Dskip.bower=true -Dskip.grunt -Dskip.gulp=true -Dskip.karma=true -Dskip.webpack=true'
+                )
+
+          }
+
+          step([$class: 'WsCleanup', cleanWhenFailure: false, cleanWhenNotBuilt: false, cleanWhenUnstable: false, notFailBuild: true])
+        }
+        echo "--->${currentBuild.result}"
+        if ("${env.LEVEL}" != "null" && ("${currentBuild.result}" == "SUCCESS" || "${currentBuild.result}" == "null") && ("${JOB_TYPE}" == "CICD" || "${JOB_TYPE}" == "CD" ) ) {
+            notification( context : 'SEFS', status : 'Success')
+            echo "CD-STEP-LEVEL-${env.LEVEL}"
+            String[] myData = "${env.LEVEL}".split("/");
+            if (myData.length == 0) {
+              myData = ["${env.LEVEL}"]
+            }
+            for (String s: myData) {
+              withEnv(["LEVEL=${s}", "FD_STAGE_NAME=Staging+${s}"]) {
+                deployment {}
+                integrationTesting {}
+                smokeTesting() {}
+              }
+              notification(context : 'SEFS', status : "Success")
+            }
+        } else {
+          echo "skipping CD, no LEVEL specified or build unstable. LEVEL=" + env.LEVEL + " CurrentBuild Status=" + currentBuild.result
+          if (currentBuild.result == null) {
+            currentBuild.result = 'SUCCESS'
+          }
+        } // if
+      } //timestamps
+    } //timeout
+  } catch (err) {
+      echo "--->${currentBuild.result}"
+
+      def err_status = "${currentBuild.result}"
+      if (err_status == 'null') {
+          err_status = 'FAILURE'
+          currentBuild.result='FAILURE'
+      } else if ("${err}".contains('InterruptedException')) {
+          echo "\u274C \u274C \u274C err=${err}... ${err_status} \u274C \u274C \u274C"
+          err_status = 'ABORTED'
+          currentBuild.result='ABORTED'
+      }
+      error = err
+      notification(context : 'SEFS', status : "${err_status}", message :"failure: ${err_status}, ${err}")
+  }
+}
+if (error) {
+    throw error
+}
